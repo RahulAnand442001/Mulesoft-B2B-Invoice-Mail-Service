@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+	xmlns:email="http://www.mulesoft.org/schema/mule/email"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:sqs="http://www.mulesoft.org/schema/mule/sqs"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sqs http://www.mulesoft.org/schema/mule/sqs/current/mule-sqs.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd">
+	<http:listener-config name="HTTP_Listener_config"
+		doc:name="HTTP Listener config"
+		doc:id="8f2713f5-c3a5-4ebf-b747-872e675208e3">
+		<http:listener-connection host="0.0.0.0"
+			port="8081" usePersistentConnections="false">
+		</http:listener-connection>
+	</http:listener-config>
+	<sqs:config name="Amazon_SQS_Configuration"
+		doc:name="Amazon SQS Configuration"
+		doc:id="30a2f427-0069-4f0a-afae-21cc6ffdadda">
+		<sqs:basic-connection
+			accessKey="YOUR-AWS-ACCESS-KEY"
+			secretKey="YOUR-AWS-SECRET-ACCESS-KEY" />
+	</sqs:config>
+	<email:smtp-config name="Email_SMTP"
+		doc:name="Email SMTP" doc:id="6cf9c72c-a0c7-4693-a0cd-4e7734d2604b">
+		<email:smtp-connection host="smtp.gmail.com"
+			port="587" user="SENDER-EMAIL" password="SENDER-EMAIL-PASSWORD">
+			<email:properties>
+				<email:property key="mail.smtp.starttls.enable"
+					value="true" />
+			</email:properties>
+		</email:smtp-connection>
+	</email:smtp-config>
+	<flow name="send-message-sqsFlow"
+		doc:id="4f35fe69-ff69-4325-98d7-f3d3bd84556d">
+		<http:listener doc:name="Listener"
+			doc:id="6f1414f9-1fb2-4acb-b3ed-52ea7a8efbe0"
+			config-ref="HTTP_Listener_config" path="/send" />
+		<logger level="INFO" doc:name="Logger"
+			doc:id="f37c91ea-d2ce-409b-b7d4-1bd60c1f3f21"
+			message="start logger  #[payload]" />
+		<ee:transform doc:name="Transform Message"
+			doc:id="77e11d47-e089-4aed-98ea-1bfd584ad1b4">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+payload map (payload01,indexOfPayload01) -> {
+    sl_no: payload01.sl_no,
+    business_name: payload01.business_name,
+    total_open_amount: payload01.total_open_amount,
+    cust_number: payload01.cust_number,
+    business_code: payload01.business_code,
+    clear_date: payload01.clear_date,
+    posting_id: payload01.posting_id,
+    doc_id: payload01.doc_id,
+    name_customer: payload01.name_customer,
+    cust_payment_terms: payload01.cust_payment_terms,
+    buisness_year: payload01.buisness_year,
+    invoice_id: payload01.invoice_id,
+    document_create_date: payload01.document_create_date,
+    posting_date: payload01.posting_date,
+    invoice_currency: payload01.invoice_currency,
+    due_in_date: payload01.due_in_date,
+    document_type: payload01.document_type
+}	]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger"
+			doc:id="753ee5e6-e15b-45f9-9cb5-bcaf30d003c2"
+			message="after transform -- #[payload]" />
+		<foreach doc:name="For Each"
+			doc:id="73fb7c49-bfed-4a71-83bf-27ba72095a08" collection="#[payload]">
+			<ee:transform doc:name="Transform Message"
+				doc:id="0b023a63-26ec-4ae0-8690-132791927217">
+				<ee:message>
+					<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+	body: write(payload,"application/java")
+}]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+			<logger level="INFO" doc:name="Logger"
+				doc:id="103267ea-123d-4d00-a4e7-3d68aa8ffdc6"
+				message="inside for each -- #[payload]" />
+			<sqs:send-message doc:name="Send message"
+				doc:id="37815951-4d0b-4df7-ab87-494213a191aa"
+				config-ref="Amazon_SQS_Configuration"
+				queueUrl="YOU-AWS-SQS-QUEUE-URL"
+				target="send" />
+		</foreach>
+		<ee:transform doc:name="Transform Message"
+			doc:id="9f4f004e-f882-4860-ad80-40a4f1ace32a">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+vars]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Log Data"
+			doc:id="1fe4f8b5-2c81-4888-840d-ece8b103fff2" message="#[payload]" />
+	</flow>
+	<flow name="receive-message"
+		doc:id="4b120318-5c8f-4e2c-bc49-c79220a57f37">
+		<sqs:receivemessages doc:name="Receive messages"
+			doc:id="f14a6ecb-6791-4a3a-a896-1e7b83af73b3"
+			config-ref="Amazon_SQS_Configuration"
+			queueUrl="YOU-AWS-SQS-QUEUE-URL"
+			startDelay="30" timeUnit="SECONDS" frequency="20" />
+		<ee:transform doc:name="Transform Message"
+			doc:id="95cb7ed8-ca02-4532-9b7b-c3e93c0687aa">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger"
+			doc:id="46b56122-a00c-4627-b870-f34ebd672476"
+			message="received message -- #[payload]" />
+		<email:send doc:name="Send"
+			doc:id="23ba57d2-c85b-450d-96e4-628ffb1c2629" config-ref="Email_SMTP"
+			fromAddress="SENDER-EMAIL-ADDRESS"
+			subject="MAIL SUBJECT">
+			<email:to-addresses>
+				<email:to-address value="RECIEPENT EMAIL" />
+			</email:to-addresses>
+		</email:send>
+	</flow>
+</mule>
